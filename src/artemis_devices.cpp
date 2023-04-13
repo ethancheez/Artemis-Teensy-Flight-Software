@@ -35,8 +35,8 @@ namespace Artemis
         packet.header.type = PacketComm::TypeId::DataObcBeacon;
         packet.data.resize(sizeof(beacon));
         memcpy(packet.data.data(), &beacon, sizeof(beacon));
-        packet.header.chanorig = 0;
-        packet.header.chandest = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
+        packet.header.chanin = 0;
+        packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
         PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
 
         return 0;
@@ -80,8 +80,8 @@ namespace Artemis
         packet.header.type = PacketComm::TypeId::DataObcBeacon;
         packet.data.resize(sizeof(beacon));
         memcpy(packet.data.data(), &beacon, sizeof(beacon));
-        packet.header.chanorig = 0;
-        packet.header.chandest = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
+        packet.header.chanin = 0;
+        packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
         PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
 
         return 0;
@@ -128,15 +128,15 @@ namespace Artemis
         beacon1.deci = uptime;
         packet.data.resize(sizeof(beacon1));
         memcpy(packet.data.data(), &beacon1, sizeof(beacon1));
-        packet.header.chanorig = 0;
-        packet.header.chandest = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
+        packet.header.chanin = 0;
+        packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
         PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
 
         beacon2.deci = uptime;
         packet.data.resize(sizeof(beacon2));
         memcpy(packet.data.data(), &beacon2, sizeof(beacon2));
-        packet.header.chanorig = 0;
-        packet.header.chandest = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
+        packet.header.chanin = 0;
+        packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
         PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
 
         return 0;
@@ -160,18 +160,17 @@ namespace Artemis
         for (auto &it : temp_sensors)
         {
             const int reading = analogRead(it.second);
-            float voltage = reading * AREF_VOLTAGE;
-            voltage /= 1024.0;
-            const float temperatureF = (voltage * 1000) - 58;
-            beacon.temperatureC[std::distance(temp_sensors.begin(), temp_sensors.find(it.first))] = (temperatureF - 32) / 1.8;
+            float voltage = reading * MV_PER_ADC_UNIT;
+            const float temperatureF = (voltage - OFFSET_F) / MV_PER_DEGREE_F;                                                   // Convert voltage to temperature in Fahrenheit and then subtract the offset
+            beacon.temperatureC[std::distance(temp_sensors.begin(), temp_sensors.find(it.first))] = (temperatureF - 32) * 5 / 9; // Convert temperature to Celsius
         }
         packet.header.nodeorig = (uint8_t)NODES::TEENSY_NODE_ID;
         packet.header.nodedest = (uint8_t)NODES::GROUND_NODE_ID;
         packet.header.type = PacketComm::TypeId::DataObcBeacon;
         packet.data.resize(sizeof(beacon));
         memcpy(packet.data.data(), &beacon, sizeof(beacon));
-        packet.header.chanorig = 0;
-        packet.header.chandest = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
+        packet.header.chanin = 0;
+        packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
         PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
 
         return 0;
@@ -193,7 +192,7 @@ namespace Artemis
     {
         if (gps->available())
         {
-            while (gps->read())
+            while (gps->read()) // Clear any data from the GPS module
                 ;
         }
 
@@ -210,74 +209,50 @@ namespace Artemis
 
     int32_t Devices::read_gps(uint32_t uptime)
     {
-        // TODO: Store in beacons / internal structures
-        Serial.print("\nTime: ");
-
-        if (gps->hour < 10)
-        {
-            Serial.print('0');
-        }
-
-        Serial.print(gps->hour, DEC);
-        Serial.print(':');
-
-        if (gps->minute < 10)
-        {
-            Serial.print('0');
-        }
-
-        Serial.print(gps->minute, DEC);
-        Serial.print(':');
-
-        if (gps->seconds < 10)
-        {
-            Serial.print('0');
-        }
-
-        Serial.print(gps->seconds, DEC);
-        Serial.print('.');
-
-        if (gps->milliseconds < 10)
-        {
-            Serial.print("00");
-        }
-        else if (gps->milliseconds > 9 && gps->milliseconds < 100)
-        {
-            Serial.print("0");
-        }
-
-        Serial.println(gps->milliseconds);
-        Serial.print("Date: ");
-        Serial.print(gps->day, DEC);
-        Serial.print('/');
-        Serial.print(gps->month, DEC);
-        Serial.print("/20");
-        Serial.println(gps->year, DEC);
-        Serial.print("Fix: ");
-        Serial.print((int)gps->fix);
-        Serial.print(" quality: ");
-        Serial.println((int)gps->fixquality);
+        PacketComm packet;
+        gpsbeacon beacon;
+        beacon.deci = uptime;
 
         if (gps->fix)
         {
-            Serial.print("Location (DDDMM.MMMM): ");
-            Serial.print(gps->latitude, 4);
-            Serial.print(gps->lat);
-            Serial.print(", ");
-            Serial.print(gps->longitude, 4);
-            Serial.println(gps->lon);
-            Serial.print("Location (Decimal Degree): ");
-            Serial.print(gps->latitudeDegrees);
-            Serial.print(", ");
-            Serial.println(gps->longitudeDegrees);
-            Serial.print("Speed (knots): ");
-            Serial.println(gps->speed);
-            Serial.print("Angle: ");
-            Serial.println(gps->angle);
-            Serial.print("Altitude: ");
-            Serial.println(gps->altitude);
-            Serial.print("Satellites: ");
-            Serial.println((int)gps->satellites);
+            // beacon.hour = gps->hour;
+            // beacon.minute = gps->minute;
+            // beacon.seconds = gps->seconds;
+            // beacon.milliseconds = gps->milliseconds;
+            // beacon.day = gps->day;
+            // beacon.month = gps->month;
+            // beacon.year = gps->year;
+            beacon.latitude = gps->latitude;
+            beacon.longitude = gps->longitude;
+            beacon.speed = gps->speed;
+            beacon.angle = gps->angle;
+            beacon.altitude = gps->altitude;
+            beacon.satellites = gps->satellites;
+        }
+        else
+        {
+            // beacon.hour = 0;
+            // beacon.minute = 0;
+            // beacon.seconds = 0;
+            // beacon.milliseconds = 0;
+            // beacon.day = 0;
+            // beacon.month = 0;
+            // beacon.year = 0;
+            beacon.latitude = 0;
+            beacon.longitude = 0;
+            beacon.speed = 0;
+            beacon.angle = 0;
+            beacon.altitude = 0;
+            beacon.satellites = 0;
+
+            packet.header.nodeorig = (uint8_t)NODES::TEENSY_NODE_ID;
+            packet.header.nodedest = (uint8_t)NODES::GROUND_NODE_ID;
+            packet.header.type = PacketComm::TypeId::DataObcBeacon;
+            packet.data.resize(sizeof(beacon));
+            memcpy(packet.data.data(), &beacon, sizeof(beacon));
+            packet.header.chanin = 0;
+            packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
+            PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
         }
 
         return 0;

@@ -34,7 +34,9 @@ void setup()
 
   usb.begin();
   pinMode(RPI_ENABLE, OUTPUT);
+  pinMode(UART6_RX, INPUT);
   delay(3000);
+  // pinMode(RPI_ENABLE, HIGH);
 
   iretn = devices.setup_magnetometer();
   if (iretn < 0)
@@ -52,8 +54,9 @@ void setup()
   threads.setSliceMillis(10);
 
   // Threads
-  thread_list.push_back({threads.addThread(Channels::rfm23_channel, 9000), Channels::Channel_ID::RFM23_CHANNEL});
-  thread_list.push_back({threads.addThread(Channels::pdu_channel, 9000), Channels::Channel_ID::PDU_CHANNEL});
+  // thread_list.push_back({threads.addThread(Channels::rfm23_channel, 9000), Channels::Channel_ID::RFM23_CHANNEL});
+  // thread_list.push_back({threads.addThread(Channels::pdu_channel, 9000), Channels::Channel_ID::PDU_CHANNEL});
+  thread_list.push_back({threads.addThread(Channels::rpi_channel, 9000), Channels::Channel_ID::RPI_CHANNEL});
 
   Serial.println("Setup Complete");
 }
@@ -69,7 +72,7 @@ void loop()
   {
     if (packet.header.nodedest == (uint8_t)NODES::GROUND_NODE_ID)
     {
-      switch (packet.header.chandest)
+      switch (packet.header.chanout)
       {
       case Channels::Channel_ID::RFM23_CHANNEL:
         PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
@@ -80,6 +83,26 @@ void loop()
     }
     else if (packet.header.nodedest == (uint8_t)NODES::RPI_NODE_ID)
     {
+      if (!digitalRead(UART6_RX))
+      {
+        float curr_V = devices.current_sensors["battery_board"]->getBusVoltage_V();
+        Serial.println(curr_V);
+        if ((packet.data[1] == 1 && curr_V >= 7.0) || (packet.data[1] == 1 && packet.data[2] == 1))
+        {
+          Serial.println(packet.data[1]);
+          digitalWrite(RPI_ENABLE, packet.data[1]);
+          thread_list.push_back({threads.addThread(Channels::rpi_channel), Channels::Channel_ID::RPI_CHANNEL});
+        }
+        else
+        {
+          packet.header.type = PacketComm::TypeId::CommandEpsSwitchStatus;
+          packet.header.nodeorig = (uint8_t)NODES::GROUND_NODE_ID;
+          packet.header.nodedest = (uint8_t)NODES::TEENSY_NODE_ID;
+          packet.data.clear();
+          packet.data.push_back((uint8_t)Artemis::Teensy::PDU::PDU_SW::All);
+          PushQueue(packet, pdu_queue, pdu_queue_mtx);
+        }
+      }
       PushQueue(packet, rpi_queue, rpi_queue_mtx);
     }
     else if (packet.header.nodedest == (uint8_t)NODES::TEENSY_NODE_ID)
@@ -97,7 +120,7 @@ void loop()
         {
           packet.data.push_back(data[i]);
         }
-        switch (packet.header.chandest)
+        switch (packet.header.chanout)
         {
         case Channels::Channel_ID::RFM23_CHANNEL:
           PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
@@ -119,7 +142,6 @@ void loop()
         {
         case PDU::PDU_SW::RPI:
         {
-
           float curr_V = devices.current_sensors["battery_board"]->getBusVoltage_V();
           Serial.println(curr_V);
           if ((packet.data[1] == 1 && curr_V >= 7.0) || (packet.data[1] == 1 && packet.data[2] == 1))
@@ -131,6 +153,15 @@ void loop()
           else if (packet.data[1] == 0)
           {
             PushQueue(packet, rpi_queue, rpi_queue_mtx);
+          }
+          else
+          {
+            packet.header.type = PacketComm::TypeId::CommandEpsSwitchStatus;
+            packet.header.nodeorig = (uint8_t)NODES::GROUND_NODE_ID;
+            packet.header.nodedest = (uint8_t)NODES::TEENSY_NODE_ID;
+            packet.data.clear();
+            packet.data.push_back((uint8_t)Artemis::Teensy::PDU::PDU_SW::All);
+            PushQueue(packet, pdu_queue, pdu_queue_mtx);
           }
           break;
         }
@@ -167,6 +198,7 @@ void loop()
         devices.read_current(uptime);
         devices.read_imu(uptime);
         devices.read_mag(uptime);
+        devices.read_gps(uptime);
       }
       default:
         break;
@@ -175,7 +207,7 @@ void loop()
   }
 
   // Periodic Telemetry
-  if (sensortimer > 10000)
+  if (sensortimer > 600000)
   {
     sensortimer = 0;
     devices.read_temperature(uptime);
@@ -183,6 +215,14 @@ void loop()
     devices.read_imu(uptime);
     devices.read_mag(uptime);
     devices.read_gps(uptime);
+
+    // Get PDU Switches
+    packet.header.type = PacketComm::TypeId::CommandEpsSwitchStatus;
+    packet.header.nodeorig = (uint8_t)NODES::GROUND_NODE_ID;
+    packet.header.nodedest = (uint8_t)NODES::TEENSY_NODE_ID;
+    packet.data.clear();
+    packet.data.push_back((uint8_t)Artemis::Teensy::PDU::PDU_SW::All);
+    PushQueue(packet, pdu_queue, pdu_queue_mtx);
   }
   devices.update_gps();
 
