@@ -1,5 +1,6 @@
 #include "channels/artemis_channels.h"
 #include <rfm23.h>
+#include "private.h"
 
 namespace
 {
@@ -17,6 +18,7 @@ namespace
             .tx_on = TX_ON,
             .rx_on = RX_ON,
         },
+        .key = AES_256_KEY,
     };
 
     RFM23 rfm23(config.pins.cs, config.pins.nirq, hardware_spi1);

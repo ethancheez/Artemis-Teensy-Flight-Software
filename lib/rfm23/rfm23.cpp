@@ -10,7 +10,7 @@ namespace Artemis
 
             int32_t RFM23::init(rfm23_config cfg, Threads::Mutex *mtx)
             {
-                Serial.println("Radio initializing...");
+                Serial.println("[RFM23] Initializing ...");
                 config = cfg;
                 spi_mtx = mtx;
 
@@ -27,7 +27,7 @@ namespace Artemis
                     if (timeout > 10000)
                     {
 
-                        Serial.println("Radio failed to initialize");
+                        Serial.println("[RFM23] INIT FAILED");
                         return -1;
                     }
                 }
@@ -48,14 +48,17 @@ namespace Artemis
                 {
                     if (timeout > 10000)
                     {
-                        Serial.println("Radio failed to set FSK modulation");
+                        Serial.println("[RFM23] SET FSK MODULATION FAILED");
                         return -1;
                     }
                 }
                 rfm23.sleep();
 
-                Serial.println("Radio initialized");
+                Serial.println("[RFM23] INIT SUCCESS");
                 rfm23.setModeIdle();
+
+                crypto.setKey(config.key);
+
                 return 0;
             }
 
@@ -77,30 +80,35 @@ namespace Artemis
                 iretn = packet.Wrap();
                 if (iretn < 0)
                 {
-                    Serial.println("Wrap fail");
+                    Serial.println("[RFM23] Wrap fail");
                     return -1;
                 }
-                if (packet.wrapped.size() > RH_RF22_MAX_MESSAGE_LEN)
+
+                vector<uint8_t> encrypted;
+                crypto.randomizeIV(4);
+                crypto.encrypt(packet.wrapped, encrypted);
+
+                if (encrypted.size() > RH_RF22_MAX_MESSAGE_LEN)
                 {
-                    Serial.println("[RFM23] oversize");
                     return COSMOS_GENERAL_ERROR_OVERSIZE;
                 }
 
                 Threads::Scope lock(*spi_mtx);
-                rfm23.send(packet.wrapped.data(), packet.wrapped.size());
+                rfm23.send(encrypted.data(), encrypted.size());
                 iretn = rfm23.waitPacketSent(1000);
 
                 if (iretn == false)
                 {
+                    Serial.println("[RFM23] TX Timeout");
                     return -1;
                 }
 
                 rfm23.sleep();
                 rfm23.setModeIdle();
-                Serial.print("Radio Sending: [");
-                for (size_t i = 0; i < packet.wrapped.size(); i++)
+                Serial.print("[RFM23] SENDING: [");
+                for (size_t i = 0; i < encrypted.size(); i++)
                 {
-                    Serial.print(packet.wrapped[i], HEX);
+                    Serial.print(encrypted[i], HEX);
                 }
                 Serial.println("]");
 
@@ -117,18 +125,30 @@ namespace Artemis
                 Threads::Scope lock(*spi_mtx);
                 if (rfm23.waitAvailableTimeout(timeout))
                 {
-                    packet.wrapped.resize(0);
-                    packet.wrapped.resize(RH_RF22_MAX_MESSAGE_LEN);
-                    uint8_t bytes_recieved = packet.wrapped.size();
-                    if (rfm23.recv(packet.wrapped.data(), &bytes_recieved))
+                    vector<uint8_t> encrypted;
+                    encrypted.resize(RH_RF22_MAX_MESSAGE_LEN);
+                    uint8_t bytes_received = encrypted.size();
+                    if (rfm23.recv(encrypted.data(), &bytes_received))
                     {
-                        packet.wrapped.resize(bytes_recieved);
+                        encrypted.resize(bytes_received);
+
+                        // Decrypt
+                        vector<uint8_t> iv;
+                        for (size_t i = encrypted.size() - 4; i < encrypted.size(); i++)
+                        {
+                            iv.push_back(encrypted[i]);
+                        }
+
+                        crypto.setIV(iv);
+                        encrypted.resize(encrypted.size() - 4);
+                        crypto.decrypt(encrypted, packet.wrapped);
+
                         iretn = packet.Unwrap();
                         rfm23.setModeIdle();
 
                         if (iretn < 0)
                         {
-                            Serial.println("Data received, but not in packetcomm format");
+                            Serial.println("[RFM23] Unwrap fail");
                             return -1;
                         }
 
