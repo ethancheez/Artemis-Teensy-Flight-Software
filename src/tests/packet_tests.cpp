@@ -7,6 +7,7 @@ namespace
 {
     elapsedMillis piShutdownTimer = 0;
     bool isoff = false;
+    uint32_t packet_count = 0;
 }
 
 void send_test_packets()
@@ -60,5 +61,25 @@ void send_test_packets()
         packet.data.push_back(0);
         PushQueue(packet, main_queue, main_queue_mtx);
     }
+#endif
+
+#ifdef TEST_RFM23
+    packet.header.type = PacketComm::TypeId::DataObcResponse;
+    packet.header.nodeorig = (uint8_t)NODES::TEENSY_NODE_ID;
+    packet.header.nodedest = (uint8_t)NODES::GROUND_NODE_ID;
+    packet.header.chanin = 0;
+    packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
+
+    packet.data.resize(0);
+    String data_str = String(packet_count);
+    for (size_t i = 0; i < data_str.length(); i++)
+    {
+        Serial.print((unsigned)(data_str[i] - '0'));
+        packet.data.push_back(data_str[i] - '0');
+    }
+    Serial.println();
+    packet_count++;
+
+    PushQueue(packet, main_queue, main_queue_mtx);
 #endif
 }

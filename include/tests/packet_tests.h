@@ -7,8 +7,9 @@
 // #define TEST_I2C_PI
 // #define TEST_ASTRODEV
 // #define TEST_PDU
-#define TEST_CAMERACAPTURE
+// #define TEST_CAMERACAPTURE
 // #define TEST_RPI_SHUTDOWN
+// #define TEST_RFM23
 
 void send_test_packets();
 

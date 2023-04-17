@@ -67,12 +67,13 @@ void Artemis::Teensy::Channels::rfm23_channel()
             PushQueue(packet, main_queue, main_queue_mtx);
         }
 
-        if (telem > 10000)
-        {
-            Serial.print("Radio temperature = ");
-            Serial.println(rfm23.get_tsen());
-            telem = 0;
-        }
+        // TODO
+        // if (telem > 10000)
+        // {
+        //     Serial.print("Radio temperature = ");
+        //     Serial.println(rfm23.get_tsen());
+        //     telem = 0;
+        // }
 
         threads.delay(10);
     }

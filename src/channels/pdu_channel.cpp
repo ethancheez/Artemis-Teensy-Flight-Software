@@ -81,28 +81,23 @@ void Artemis::Teensy::Channels::pdu_channel()
             case PacketComm::TypeId::CommandEpsSwitchStatus:
             {
                 string response;
-                Artemis::Teensy::PDU::PDU_SW switchid = (Artemis::Teensy::PDU::PDU_SW)packet.data[0];
-                pdu.get_switch(switchid, response);
-
-                if (switchid == Artemis::Teensy::PDU::PDU_SW::All)
+                pdu.get_switch(Artemis::Teensy::PDU::PDU_SW::All, response);
+                switchbeacon beacon;
+                beacon.deci = uptime;
+                for (size_t i = 2; i < response.length(); i++)
                 {
-                    switchbeacon beacon;
-                    beacon.deci = uptime;
-                    for (size_t i = 2; i < response.length(); i++)
-                    {
-                        beacon.sw[i - 2] = response[i] - PDU_CMD_OFFSET;
-                    }
-                    beacon.sw[12] = digitalRead(RPI_ENABLE);
-
-                    packet.header.type = PacketComm::TypeId::DataObcBeacon;
-                    packet.header.nodeorig = (uint8_t)NODES::TEENSY_NODE_ID;
-                    packet.header.nodedest = (uint8_t)NODES::GROUND_NODE_ID;
-                    packet.data.resize(sizeof(beacon));
-                    memcpy(packet.data.data(), &beacon, sizeof(beacon));
-                    packet.header.chanin = 0;
-                    packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
-                    PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
+                    beacon.sw[i - 2] = response[i] - PDU_CMD_OFFSET;
                 }
+                beacon.sw[12] = digitalRead(RPI_ENABLE);
+
+                packet.header.type = PacketComm::TypeId::DataObcBeacon;
+                packet.header.nodeorig = (uint8_t)NODES::TEENSY_NODE_ID;
+                packet.header.nodedest = (uint8_t)NODES::GROUND_NODE_ID;
+                packet.data.resize(sizeof(beacon));
+                memcpy(packet.data.data(), &beacon, sizeof(beacon));
+                packet.header.chanin = 0;
+                packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
+                PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
                 break;
             }
             default:

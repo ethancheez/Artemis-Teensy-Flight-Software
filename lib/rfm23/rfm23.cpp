@@ -10,7 +10,7 @@ namespace Artemis
 
             int32_t RFM23::init(rfm23_config cfg, Threads::Mutex *mtx)
             {
-                Serial.println("Radio Initializing...");
+                Serial.println("Radio initializing...");
                 config = cfg;
                 spi_mtx = mtx;
 
@@ -77,13 +77,23 @@ namespace Artemis
                 iretn = packet.Wrap();
                 if (iretn < 0)
                 {
-                    Serial.println("Unwrap fail");
+                    Serial.println("Wrap fail");
                     return -1;
+                }
+                if (packet.wrapped.size() > RH_RF22_MAX_MESSAGE_LEN)
+                {
+                    Serial.println("[RFM23] oversize");
+                    return COSMOS_GENERAL_ERROR_OVERSIZE;
                 }
 
                 Threads::Scope lock(*spi_mtx);
                 rfm23.send(packet.wrapped.data(), packet.wrapped.size());
-                rfm23.waitPacketSent(100);
+                iretn = rfm23.waitPacketSent(1000);
+
+                if (iretn == false)
+                {
+                    return -1;
+                }
 
                 rfm23.sleep();
                 rfm23.setModeIdle();

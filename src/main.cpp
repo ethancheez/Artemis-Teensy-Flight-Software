@@ -54,9 +54,9 @@ void setup()
   threads.setSliceMillis(10);
 
   // Threads
-  // thread_list.push_back({threads.addThread(Channels::rfm23_channel, 9000), Channels::Channel_ID::RFM23_CHANNEL});
+  thread_list.push_back({threads.addThread(Channels::rfm23_channel, 9000), Channels::Channel_ID::RFM23_CHANNEL});
   // thread_list.push_back({threads.addThread(Channels::pdu_channel, 9000), Channels::Channel_ID::PDU_CHANNEL});
-  thread_list.push_back({threads.addThread(Channels::rpi_channel, 9000), Channels::Channel_ID::RPI_CHANNEL});
+  // thread_list.push_back({threads.addThread(Channels::rpi_channel, 9000), Channels::Channel_ID::RPI_CHANNEL});
 
   Serial.println("Setup Complete");
 }
