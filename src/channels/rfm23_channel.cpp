@@ -19,6 +19,7 @@ namespace
             .rx_on = RX_ON,
         },
         .key = AES_256_KEY,
+        .iv_size = AES_IV_SIZE,
     };
 
     RFM23 rfm23(config.pins.cs, config.pins.nirq, hardware_spi1);
@@ -58,7 +59,7 @@ void Artemis::Teensy::Channels::rfm23_channel()
             timeout = 100;
         if (rfm23.recv(packet, (uint16_t)timeout) >= 0)
         {
-            Serial.print("Radio received ");
+            Serial.print("[RFM23] RECEIVED ");
             Serial.print(packet.wrapped.size());
             Serial.print(" bytes: [");
             for (size_t i = 0; i < packet.wrapped.size(); i++)
@@ -69,10 +70,9 @@ void Artemis::Teensy::Channels::rfm23_channel()
             PushQueue(packet, main_queue, main_queue_mtx);
         }
 
-        // TODO
         // if (telem > 10000)
         // {
-        //     Serial.print("Radio temperature = ");
+        //     Serial.print("[RFM23] TSEN = ");
         //     Serial.println(rfm23.get_tsen());
         //     telem = 0;
         // }
