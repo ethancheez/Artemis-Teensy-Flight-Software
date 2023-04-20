@@ -25,7 +25,7 @@ namespace Artemis
             serial->print(msg.c_str());
             serial->print('\n');
 
-            Serial.print("SENDING TO PDU: [");
+            Serial.print("Sending to PDU: [");
             for (size_t i = 0; i < msg.length(); i++)
             {
                 Serial.print(msg[i] - PDU_CMD_OFFSET, HEX);
@@ -33,6 +33,7 @@ namespace Artemis
             Serial.println(']');
 
             free(cmd);
+            delay(1);
             return 0;
         }
 
@@ -71,7 +72,7 @@ namespace Artemis
                     {
                         Serial.print("Attempt ");
                         Serial.print(attempts);
-                        Serial.println(": FAIL TO SEND CMD TO PDU");
+                        Serial.println(": Failed to send CMD to PDU");
                         timeout = 0;
 
                         if (++attempts == 5)
@@ -88,7 +89,6 @@ namespace Artemis
 
                 threads.delay(100);
             }
-            // TODO: Send to PacketComm packet -> then to ground
             Serial.print("UART RECV: ");
             Serial.println(response.c_str());
             return 0;
@@ -112,7 +112,7 @@ namespace Artemis
                     {
                         Serial.print("Attempt ");
                         Serial.print(attempts);
-                        Serial.println(": FAIL TO SEND CMD TO PDU");
+                        Serial.println(": Failed to send CMD to PDU");
                         timeout = 0;
 
                         if (++attempts == 5)

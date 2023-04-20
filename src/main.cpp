@@ -34,20 +34,12 @@ void setup()
 
   usb.begin();
   pinMode(RPI_ENABLE, OUTPUT);
-  pinMode(UART6_RX, INPUT);
+  pinMode(UART6_TX, INPUT);
   delay(3000);
-  // pinMode(RPI_ENABLE, HIGH);
 
   iretn = devices.setup_magnetometer();
-  if (iretn < 0)
-  {
-    Serial.println("Fail to initialize magnetometer");
-  }
   iretn = devices.setup_imu();
-  if (iretn < 0)
-  {
-    Serial.println("Fail to initialize IMU");
-  }
+
   devices.setup_current();
   devices.setup_gps();
 
@@ -55,10 +47,14 @@ void setup()
 
   // Threads
   thread_list.push_back({threads.addThread(Channels::rfm23_channel, 9000), Channels::Channel_ID::RFM23_CHANNEL});
-  // thread_list.push_back({threads.addThread(Channels::pdu_channel, 9000), Channels::Channel_ID::PDU_CHANNEL});
-  // thread_list.push_back({threads.addThread(Channels::rpi_channel, 9000), Channels::Channel_ID::RPI_CHANNEL});
+  thread_list.push_back({threads.addThread(Channels::pdu_channel, 9000), Channels::Channel_ID::PDU_CHANNEL});
 
-  Serial.println("Setup Complete");
+// Only uncomment these when testing and you want to force the RPi to turn on  
+  // thread_list.push_back({threads.addThread(Channels::rpi_channel, 9000), Channels::Channel_ID::RPI_CHANNEL});
+  // pinMode(RPI_ENABLE, HIGH);
+
+  threads.delay(5000);
+  Serial.println("Teensy Flight Software Setup Complete");
 }
 
 void loop()
@@ -67,6 +63,8 @@ void loop()
   send_test_packets();
   threads.delay(5000);
 #endif
+  pinMode(UART6_TX, INPUT);
+  Serial.println(digitalRead(UART6_TX));
 
   if (PullQueue(packet, main_queue, main_queue_mtx))
   {
@@ -83,15 +81,15 @@ void loop()
     }
     else if (packet.header.nodedest == (uint8_t)NODES::RPI_NODE_ID)
     {
-      if (!digitalRead(UART6_RX))
+      if (!digitalRead(UART6_TX))
       {
         float curr_V = devices.current_sensors["battery_board"]->getBusVoltage_V();
-        Serial.println(curr_V);
-        if ((packet.data[1] == 1 && curr_V >= 7.0) || (packet.data[1] == 1 && packet.data[2] == 1))
+        if ((curr_V >= 7.0) || 1)
         {
-          Serial.println(packet.data[1]);
-          digitalWrite(RPI_ENABLE, packet.data[1]);
-          thread_list.push_back({threads.addThread(Channels::rpi_channel), Channels::Channel_ID::RPI_CHANNEL});
+          Serial.println("Turning on RPi");
+          digitalWrite(RPI_ENABLE, HIGH);
+          thread_list.push_back({threads.addThread(Channels::rpi_channel, 9000), Channels::Channel_ID::RPI_CHANNEL});
+          threads.delay(5000);
         }
         else
         {
@@ -143,12 +141,11 @@ void loop()
         case PDU::PDU_SW::RPI:
         {
           float curr_V = devices.current_sensors["battery_board"]->getBusVoltage_V();
-          Serial.println(curr_V);
           if ((packet.data[1] == 1 && curr_V >= 7.0) || (packet.data[1] == 1 && packet.data[2] == 1))
           {
-            Serial.println(packet.data[1]);
             digitalWrite(RPI_ENABLE, packet.data[1]);
             thread_list.push_back({threads.addThread(Channels::rpi_channel), Channels::Channel_ID::RPI_CHANNEL});
+            threads.delay(5000);
           }
           else if (packet.data[1] == 0)
           {
@@ -199,6 +196,14 @@ void loop()
         devices.read_imu(uptime);
         devices.read_mag(uptime);
         devices.read_gps(uptime);
+
+        // Get PDU Switches
+        packet.header.type = PacketComm::TypeId::CommandEpsSwitchStatus;
+        packet.header.nodeorig = (uint8_t)NODES::GROUND_NODE_ID;
+        packet.header.nodedest = (uint8_t)NODES::TEENSY_NODE_ID;
+        packet.data.clear();
+        packet.data.push_back((uint8_t)Artemis::Teensy::PDU::PDU_SW::All);
+        PushQueue(packet, pdu_queue, pdu_queue_mtx);
       }
       default:
         break;
@@ -226,5 +231,5 @@ void loop()
   }
   devices.update_gps();
 
-  threads.delay(10);
+  threads.delay(1000);
 }

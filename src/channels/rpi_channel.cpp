@@ -12,8 +12,8 @@ namespace
 
 void Artemis::Teensy::Channels::rpi_channel()
 {
+    Serial.println("RPI Thread starting..");
     Serial2.begin(9600);
-    rpi_queue.empty();
 
     while (true)
     {
@@ -28,7 +28,7 @@ void Artemis::Teensy::Channels::rpi_channel()
                     packet.header.type = PacketComm::TypeId::CommandObcHalt;
 
                     // Wait for PI_STATUS to turn off
-                    while (digitalRead(UART6_RX))
+                    while (digitalRead(UART6_TX))
                     {
                         Serial.println((uint16_t)packet.header.type);
                         sendToPi();
@@ -51,14 +51,15 @@ void Artemis::Teensy::Channels::rpi_channel()
                 break;
             }
         }
+        threads.delay(100);
     }
-    threads.delay(100);
+    
 }
 
 void sendToPi()
 {
     packet.SLIPPacketize();
-    Serial.println("Forwarding to pi... ");
+    Serial.println("Forwarding to RPi");
     for (size_t i = 0; i < packet.packetized.size(); i++)
     {
         Serial.print((unsigned)packet.packetized[i]);
